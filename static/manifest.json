@@ -1,0 +1,23 @@
+{
+    "name": "滞在管理システム",
+    "short_name": "滞在管理",
+    "description": "メンバーの入退室状況をリアルタイムで管理するアプリ",
+    "start_url": "./",
+    "display": "standalone",
+    "background_color": "#ffffff",
+    "theme_color": "#1976d2",
+    "icons": [
+        {
+          "src": "/web-app-manifest-192x192.png",
+          "sizes": "192x192",
+          "type": "image/png",
+          "purpose": "maskable"
+        },
+        {
+          "src": "/web-app-manifest-512x512.png",
+          "sizes": "512x512",
+          "type": "image/png",
+          "purpose": "maskable"
+        }
+    ]
+  }
