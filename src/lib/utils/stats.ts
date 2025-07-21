@@ -135,69 +135,86 @@ export const calculateStats = (records: Record[]): Stats => {
 
 // 期間の記録から日別、週別、月別の統計情報を計算
 export const calculatePeriodStats = (records: Record[], startDate: Date, endDate: Date): PeriodStats => {
-  // 'in'と'out'のペアから日ごとの滞在時間を計算
   const dailyMinutes = new Map<string, number>();
-  const inRecords: Record[] = [];
-  const outRecords: Record[] = [];
-  
-  // 入室と退室の記録を分類
+
+  // 'out'記録のdurationを日別に集計するだけ
   records.forEach(record => {
-    if (record.type === 'in') {
-      inRecords.push(record);
-    } else if (record.type === 'out') {
-      outRecords.push(record);
+    if (record.type === 'out' && record.duration) {
+      // タイムスタンプが日付オブジェクトであることを確認
+      const recordDate = record.timestamp instanceof Date ? record.timestamp : new Date(record.timestamp);
+      const day = formatDateKey(recordDate);
+      dailyMinutes.set(day, (dailyMinutes.get(day) || 0) + record.duration);
     }
   });
-  
-  // 各'out'記録に対応する'in'記録を見つけて滞在時間を計算
-  outRecords.forEach(outRecord => {
-    if (!outRecord.duration) return; // 滞在時間がない場合はスキップ
-    
-    // この'out'記録に対応する最新の'in'記録を見つける
-    const matchingInRecord = inRecords
-      .filter(inRecord => isBefore(inRecord.timestamp, outRecord.timestamp))
-      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())[0];
-    
-    if (matchingInRecord) {
-      // 日をまたぐ滞在を日ごとに分割
-      const dailySplits = splitStayByDays(matchingInRecord.timestamp, outRecord.timestamp);
-      
-      // 各日の滞在時間を累積
-      dailySplits.forEach((minutes, day) => {
-        dailyMinutes.set(day, (dailyMinutes.get(day) || 0) + minutes);
-      });
-    } else {
-      // 対応する'in'が見つからない場合は退室日に全て計上
-      const day = formatDateKey(outRecord.timestamp);
-      dailyMinutes.set(day, (dailyMinutes.get(day) || 0) + (outRecord.duration || 0));
-    }
-  });
+
+  // 以下、集計したdailyMinutesから各統計を計算するロジック (ここは変更なし)
   
   // 日別、週別、月別の記録マップを初期化
-  const dailyRecords = new Map<string, Record[]>();
-  const weeklyRecords = new Map<string, Record[]>();
-  const monthlyRecords = new Map<string, Record[]>();
+  const daily = new Map<string, Stats>();
+  dailyMinutes.forEach((minutes, dateKey) => {
+    daily.set(dateKey, {
+      totalTime: minutes,
+      averageTime: minutes,
+      daysPresent: 1,
+    });
+  });
+
+  const weekly = new Map<string, Stats>();
+  const weekTotals = new Map<string, number>();
+  const weekDays = new Map<string, Set<string>>();
   
-  // 平日と休日の記録を分離
-  const weekdayMinutes = new Map<string, number>();
-  const weekendMinutes = new Map<string, number>();
-  
-  // 日付ごとの滞在時間を分類
   dailyMinutes.forEach((minutes, dateKey) => {
     try {
-      // dateKeyから日付オブジェクトを作成
       const date = parseISO(dateKey);
-      
-      // 統計カテゴリに分類
       const weekKey = formatWeekKey(date);
+      weekTotals.set(weekKey, (weekTotals.get(weekKey) || 0) + minutes);
+      if (!weekDays.has(weekKey)) weekDays.set(weekKey, new Set());
+      weekDays.get(weekKey)?.add(dateKey);
+    } catch (error) {
+      console.error(`Error processing date: ${dateKey}`, error);
+    }
+  });
+
+  weekTotals.forEach((total, weekKey) => {
+    const days = weekDays.get(weekKey)?.size || 0;
+    weekly.set(weekKey, {
+      totalTime: total,
+      averageTime: days > 0 ? total / days : 0,
+      daysPresent: days,
+    });
+  });
+
+  const monthly = new Map<string, Stats>();
+  const monthTotals = new Map<string, number>();
+  const monthDays = new Map<string, Set<string>>();
+
+  dailyMinutes.forEach((minutes, dateKey) => {
+    try {
+      const date = parseISO(dateKey);
       const monthKey = formatMonthKey(date);
-      
-      // 日別、週別、月別に滞在時間を集計
-      if (!dailyRecords.has(dateKey)) dailyRecords.set(dateKey, []);
-      if (!weeklyRecords.has(weekKey)) weeklyRecords.set(weekKey, []);
-      if (!monthlyRecords.has(monthKey)) monthlyRecords.set(monthKey, []);
-      
-      // 平日・休日に分類
+      monthTotals.set(monthKey, (monthTotals.get(monthKey) || 0) + minutes);
+      if (!monthDays.has(monthKey)) monthDays.set(monthKey, new Set());
+      monthDays.get(monthKey)?.add(dateKey);
+    } catch (error) {
+      console.error(`Error processing date: ${dateKey}`, error);
+    }
+  });
+
+  monthTotals.forEach((total, monthKey) => {
+    const days = monthDays.get(monthKey)?.size || 0;
+    monthly.set(monthKey, {
+      totalTime: total,
+      averageTime: days > 0 ? total / days : 0,
+      daysPresent: days,
+    });
+  });
+
+  const weekdayMinutes = new Map<string, number>();
+  const weekendMinutes = new Map<string, number>();
+
+  dailyMinutes.forEach((minutes, dateKey) => {
+    try {
+      const date = parseISO(dateKey);
       if (isWeekend(date)) {
         weekendMinutes.set(dateKey, minutes);
       } else {
@@ -207,102 +224,14 @@ export const calculatePeriodStats = (records: Record[], startDate: Date, endDate
       console.error(`Invalid date key: ${dateKey}`, error);
     }
   });
-  
-  // 各カテゴリの統計を計算
-  const daily = new Map<string, Stats>();
-  dailyMinutes.forEach((minutes, dateKey) => {
-    daily.set(dateKey, {
-      totalTime: minutes,
-      averageTime: minutes, // 1日あたりは平均も合計も同じ
-      daysPresent: 1,
-    });
-  });
-  
-  // 週別統計
-  const weekly = new Map<string, Stats>();
-  const weekTotals = new Map<string, number>();
-  const weekDays = new Map<string, Set<string>>();
-  
-  dailyMinutes.forEach((minutes, dateKey) => {
-    try {
-      const date = parseISO(dateKey);
-      const weekKey = formatWeekKey(date);
-      
-      // 週の合計時間
-      weekTotals.set(weekKey, (weekTotals.get(weekKey) || 0) + minutes);
-      
-      // 週の出席日数
-      if (!weekDays.has(weekKey)) weekDays.set(weekKey, new Set());
-      weekDays.get(weekKey)?.add(dateKey);
-      
-    } catch (error) {
-      console.error(`Error processing date: ${dateKey}`, error);
-    }
-  });
-  
-  weekTotals.forEach((total, weekKey) => {
-    const days = weekDays.get(weekKey)?.size || 0;
-    weekly.set(weekKey, {
-      totalTime: total,
-      averageTime: days > 0 ? total / days : 0,
-      daysPresent: days,
-    });
-  });
-  
-  // 月別統計
-  const monthly = new Map<string, Stats>();
-  const monthTotals = new Map<string, number>();
-  const monthDays = new Map<string, Set<string>>();
-  
-  dailyMinutes.forEach((minutes, dateKey) => {
-    try {
-      const date = parseISO(dateKey);
-      const monthKey = formatMonthKey(date);
-      
-      // 月の合計時間
-      monthTotals.set(monthKey, (monthTotals.get(monthKey) || 0) + minutes);
-      
-      // 月の出席日数
-      if (!monthDays.has(monthKey)) monthDays.set(monthKey, new Set());
-      monthDays.get(monthKey)?.add(dateKey);
-      
-    } catch (error) {
-      console.error(`Error processing date: ${dateKey}`, error);
-    }
-  });
-  
-  monthTotals.forEach((total, monthKey) => {
-    const days = monthDays.get(monthKey)?.size || 0;
-    monthly.set(monthKey, {
-      totalTime: total,
-      averageTime: days > 0 ? total / days : 0,
-      daysPresent: days,
-    });
-  });
-  
-  // 平日・休日の統計
+
   let weekdayTotal = 0;
-  let weekdayLongest = 0;
-  weekdayMinutes.forEach((minutes) => {
-    weekdayTotal += minutes;
-    weekdayLongest = Math.max(weekdayLongest, minutes);
-  });
-  
+  weekdayMinutes.forEach((minutes) => { weekdayTotal += minutes; });
   let weekendTotal = 0;
-  let weekendLongest = 0;
-  weekendMinutes.forEach((minutes) => {
-    weekendTotal += minutes;
-    weekendLongest = Math.max(weekendLongest, minutes);
-  });
-  
-  // 全体の合計
+  weekendMinutes.forEach((minutes) => { weekendTotal += minutes; });
   let totalTime = 0;
-  let longestStay = 0;
-  dailyMinutes.forEach((minutes) => {
-    totalTime += minutes;
-    longestStay = Math.max(longestStay, minutes);
-  });
-  
+  dailyMinutes.forEach((minutes) => { totalTime += minutes; });
+
   return {
     daily,
     weekly,
