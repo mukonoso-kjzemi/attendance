@@ -80,7 +80,7 @@
       
       try {
         records = await getRecordsForPeriod(memberId, startDate, endDate);
-        console.log('取得した記録:', records);
+        console.log('取得した記録:', JSON.stringify(records, null, 2));
         console.log('記録数:', records.length);
         
         stats = calculatePeriodStats(records, startDate, endDate);
