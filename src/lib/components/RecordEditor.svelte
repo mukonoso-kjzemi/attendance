@@ -38,33 +38,44 @@
   // inとoutのペアを組むヘルパー関数
   function pairRecords(rawRecords: Record[]): Record[] {
     const paired: Record[] = [];
-    const inRecords = rawRecords.filter(r => r.type === 'in').sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
-    const outRecords = rawRecords.filter(r => r.type === 'out').sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+    const inRecords = new Map(rawRecords.filter(r => r.type === 'in').map(r => [r.id, r]));
+    const outRecords = rawRecords.filter(r => r.type === 'out');
 
-    inRecords.forEach(inRec => {
-      // このin記録に対応するout記録を探す
-      const correspondingOut = outRecords.find(outRec => 
-        outRec.inTimestamp && outRec.inTimestamp.getTime() === inRec.timestamp.getTime()
-      );
+    const usedInIds = new Set<string>();
 
-      paired.push({
-        ...inRec,
-        outTimestamp: correspondingOut?.timestamp,
-        outId: correspondingOut?.id,
-        duration: correspondingOut?.duration,
-      });
-    });
-    
-    // `in` にペアリングされなかった `out` も表示（データ不整合の場合）
     outRecords.forEach(outRec => {
-      if (!outRec.inTimestamp || !inRecords.some(inRec => inRec.timestamp.getTime() === outRec.inTimestamp.getTime())) {
+      let correspondingIn: Record | undefined;
+      let correspondingInId: string | undefined;
+
+      // outRecord.inTimestamp を使って inRecord を見つける
+      if (outRec.inTimestamp) {
+        for (const [id, inRec] of inRecords.entries()) {
+          if (inRec.timestamp.getTime() === outRec.inTimestamp.getTime()) {
+            correspondingIn = inRec;
+            correspondingInId = id;
+            break;
+          }
+        }
+      }
+
+      if (correspondingIn && correspondingInId) {
         paired.push({
-          ...outRec,
-          id: outRec.id,
-          type: 'out',
-          timestamp: outRec.timestamp,
-          inTimestamp: outRec.inTimestamp,
+          ...correspondingIn,
+          outTimestamp: outRec.timestamp,
+          outId: outRec.id,
+          duration: outRec.duration,
         });
+        usedInIds.add(correspondingInId);
+      } else {
+        // 対応するinが見つからないout記録
+        paired.push(outRec);
+      }
+    });
+
+    // まだペアになっていないin記録（退室していないもの）を追加
+    inRecords.forEach((inRec, id) => {
+      if (!usedInIds.has(id)) {
+        paired.push(inRec);
       }
     });
 
