@@ -2,95 +2,44 @@
     import { onMount, onDestroy } from 'svelte';
     import { initMembersListener, sortedMembers } from '$lib/stores/members';
     import { updateMemberStatus } from '$lib/firebase/members';
-    import { addRecord, getAllCurrentInRecords, hasOutRecordForIn, addOutRecordForIn } from '$lib/firebase/records';
-    import { getSettings, updateSettings } from '$lib/firebase/settings';
+    import { addRecord } from '$lib/firebase/records';
+    import { getAutoCheckoutTime, setAutoCheckoutTime } from '$lib/firebase/settings';
     import type { Member } from '$lib/utils/types';
     import { format } from 'date-fns';
     import { ja } from 'date-fns/locale';
     import { GRADE_COLORS } from '$lib/constants';
     
     let unsubscribe: () => void;
-    let timer: any;
     let processing = false;
     let selectedMemberId = '';
     let autoCheckoutTime = '23:00';
-    let lastExecutedDate: string | null = null;
     let settingsProcessing = false;
 
     onMount(async () => {
       unsubscribe = initMembersListener();
       settingsProcessing = true;
-      const settings = await getSettings();
-      if (settings.autoCheckoutTime) {
-        autoCheckoutTime = settings.autoCheckoutTime;
-      }
-      if (settings.lastExecutedDate) {
-        lastExecutedDate = settings.lastExecutedDate;
+      const time = await getAutoCheckoutTime();
+      if (time) {
+        autoCheckoutTime = time;
       }
       settingsProcessing = false;
-
-      // 1分ごとに自動退出処理をチェック
-      timer = setInterval(checkAndExecuteAutoSignOut, 60000);
     });
     
     onDestroy(() => {
       if (unsubscribe) {
         unsubscribe();
       }
-      if (timer) {
-        clearInterval(timer);
-      }
     });
 
     const handleSaveSettings = async () => {
       settingsProcessing = true;
       try {
-        await updateSettings({ autoCheckoutTime });
+        await setAutoCheckoutTime(autoCheckoutTime);
         alert('設定を保存しました。');
       } catch (error) {
         alert('設定の保存に失敗しました。');
       } finally {
         settingsProcessing = false;
-      }
-    };
-
-    const checkAndExecuteAutoSignOut = async () => {
-      if (!autoCheckoutTime) return;
-
-      const now = new Date();
-      const today = now.toISOString().split('T')[0]; // YYYY-MM-DD
-
-      if (lastExecutedDate === today) {
-        return; // 本日は実行済み
-      }
-
-      const [hours, minutes] = autoCheckoutTime.split(':').map(Number);
-      const signOutTime = new Date();
-      signOutTime.setHours(hours, minutes, 0, 0);
-
-      if (now > signOutTime) {
-        console.log('自動強制退出処理を開始します...');
-        try {
-          const todayStart = new Date();
-          todayStart.setHours(0, 0, 0, 0);
-
-          const inRecords = await getAllCurrentInRecords(todayStart);
-
-          for (const record of inRecords) {
-            const hasOut = await hasOutRecordForIn(record.memberId, record.timestamp);
-            if (!hasOut) {
-              await addOutRecordForIn(record.memberId, signOutTime, record.timestamp);
-              console.log(`${record.memberId} を自動退出させました。`);
-            }
-          }
-          
-          lastExecutedDate = today;
-          await updateSettings({ lastExecutedDate });
-          console.log('自動強制退出処理が完了しました。');
-
-        } catch (error) {
-          console.error('自動強制退出処理中にエラーが発生しました:', error);
-        }
       }
     };
     
@@ -167,6 +116,16 @@
         processing = false;
       }
     };
+    
+    onMount(() => {
+      unsubscribe = initMembersListener();
+    });
+    
+    onDestroy(() => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    });
   </script>
   
   <svelte:head>
