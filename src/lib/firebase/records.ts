@@ -122,14 +122,44 @@ export const getRecentRecords = async (memberId: string, days: number = 7): Prom
 export const updateRecord = async (
   memberId: string, 
   recordId: string, 
-  data: { type?: RecordType; timestamp?: Date; duration?: number }
+  data: { type?: RecordType; timestamp?: Date; duration?: number; inTimestamp?: Date; }
 ): Promise<void> => {
   const recordRef = doc(getRecordsCollection(memberId), recordId);
   const updateData: any = {};
   if (data.type) updateData.type = data.type;
   if (data.timestamp) updateData.timestamp = Timestamp.fromDate(data.timestamp);
+  if (data.inTimestamp) updateData.inTimestamp = Timestamp.fromDate(data.inTimestamp);
   if (data.duration !== undefined) updateData.duration = data.duration;
   await updateDoc(recordRef, updateData);
+};
+
+// 特定のin記録に対応するout記録を追加
+export const addOutRecordForIn = async (
+  memberId: string,
+  outTimestamp: Date,
+  inTimestamp: Date
+): Promise<string> => {
+  try {
+    const recordsCollection = getRecordsCollection(memberId);
+    const durationMinutes = Math.round(
+      (outTimestamp.getTime() - inTimestamp.getTime()) / (1000 * 60)
+    );
+
+    const record = {
+      type: 'out',
+      timestamp: Timestamp.fromDate(outTimestamp),
+      inTimestamp: Timestamp.fromDate(inTimestamp),
+      duration: Math.max(0, durationMinutes),
+      memberId,
+      deleted: false
+    };
+
+    const docRef = await addDoc(recordsCollection, record);
+    return docRef.id;
+  } catch (error) {
+    console.error('Failed to add out record:', error);
+    throw new Error('退室記録の追加に失敗しました。');
+  }
 };
 
 

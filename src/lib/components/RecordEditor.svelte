@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { getRecordsForPeriod, updateRecord, deleteRecord, addRecord } from '$lib/firebase/records';
+  import { getRecordsForPeriod, updateRecord, deleteRecord, addOutRecordForIn } from '$lib/firebase/records';
   import type { Record as RawRecord } from '$lib/utils/types';
   import { format, startOfMonth, endOfMonth, differenceInMinutes, parseISO } from 'date-fns';
 
@@ -122,30 +122,25 @@
 
     try {
       if (record.isUnmatchedOut) {
+        // ペアのいないout記録の修正
         if (outDate && record.outId) {
           await updateRecord(memberId, record.outId, { timestamp: outDate });
         }
       } else if (record.inId) {
+        // ペア、またはinのみの記録の修正
         if (inDate) {
           await updateRecord(memberId, record.inId, { timestamp: inDate });
         }
 
-        if (record.outId && outDate && inDate) {
+        if (record.outId && outDate && inDate) { // 既存ペアの更新
           const duration = differenceInMinutes(outDate, inDate);
           await updateRecord(memberId, record.outId, { 
             timestamp: outDate, 
             inTimestamp: inDate, 
             duration: Math.max(0, duration) 
           });
-        } else if (!record.outId && outDate && inDate) {
-          // 既存のinに新しいoutを追加する
-          const newOut = { 
-            type: 'out' as const,
-            timestamp: outDate,
-            inTimestamp: inDate,
-            duration: differenceInMinutes(outDate, inDate)
-          };
-          await addRecord(memberId, newOut.type, newOut.timestamp);
+        } else if (!record.outId && outDate && inDate) { // inのみの記録にoutを追加
+          await addOutRecordForIn(memberId, outDate, inDate);
         }
       }
       
