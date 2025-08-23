@@ -1,18 +1,28 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { getRecordsForPeriod, updateRecord, deleteRecord } from '$lib/firebase/records';
-  import type { Record } from '$lib/utils/types';
-  import { format, startOfMonth, endOfMonth, differenceInMinutes } from 'date-fns';
+  import { getRecordsForPeriod, updateRecord, deleteRecord, addRecord } from '$lib/firebase/records';
+  import type { Record as RawRecord } from '$lib/utils/types';
+  import { format, startOfMonth, endOfMonth, differenceInMinutes, parseISO } from 'date-fns';
+
+  // このコンポーネント内で使う、ペアリング済みのレコードの型
+  type PairedRecord = {
+    inId: string; // in記録のID。ペアなしoutの場合はout記録のIDを使う
+    outId?: string;
+    inTimestamp?: Date;
+    outTimestamp?: Date;
+    duration?: number;
+    isUnmatchedOut: boolean; // ペアのいないout記録かどうかのフラグ
+  };
 
   export let memberId: string;
   export let memberName: string;
   export let close: () => void;
 
-  let records: Record[] = [];
+  let pairedRecords: PairedRecord[] = [];
   let isLoading = true;
   let selectedYear = new Date().getFullYear();
   let selectedMonth = new Date().getMonth() + 1;
-  let editingRecordId: string | null = null;
+  let editingRecordId: string | null = null; // inId or outId
   let editValues: { in: string; out: string } = { in: '', out: '' };
 
   const years = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i);
@@ -25,30 +35,26 @@
     
     try {
       const rawRecords = await getRecordsForPeriod(memberId, startDate, endDate);
-      // `in`と`out`をペアにする
-      records = pairRecords(rawRecords);
+      pairedRecords = pairRecords(rawRecords);
     } catch (error) {
       console.error("Failed to fetch records:", error);
-      records = [];
+      pairedRecords = [];
     } finally {
       isLoading = false;
     }
   }
 
-  // inとoutのペアを組むヘルパー関数
-  function pairRecords(rawRecords: Record[]): Record[] {
-    const paired: Record[] = [];
+  function pairRecords(rawRecords: RawRecord[]): PairedRecord[] {
     const inRecords = new Map(rawRecords.filter(r => r.type === 'in').map(r => [r.id, { ...r }]));
     const outRecords = rawRecords.filter(r => r.type === 'out');
-
+    const result: PairedRecord[] = [];
     const usedInIds = new Set<string>();
 
     outRecords.forEach(outRec => {
-      let correspondingIn: Record | undefined;
+      let correspondingIn: RawRecord | undefined;
       let correspondingInId: string | undefined;
 
       if (outRec.inTimestamp) {
-        // inTimestampを使ってペアを探す
         for (const [id, inRec] of inRecords.entries()) {
           if (inRec.timestamp.getTime() === outRec.inTimestamp.getTime()) {
             correspondingIn = inRec;
@@ -59,81 +65,108 @@
       }
 
       if (correspondingIn && correspondingInId) {
-        // ペアが見つかった
-        paired.push({
-          ...correspondingIn,
-          outTimestamp: outRec.timestamp,
+        result.push({
+          inId: correspondingInId,
           outId: outRec.id,
+          inTimestamp: correspondingIn.timestamp,
+          outTimestamp: outRec.timestamp,
           duration: outRec.duration,
+          isUnmatchedOut: false,
         });
         usedInIds.add(correspondingInId);
       } else {
-        // ペアが見つからないout記録
-        paired.push(outRec);
+        result.push({
+          inId: outRec.id, // key用のユニークID
+          outId: outRec.id,
+          outTimestamp: outRec.timestamp,
+          isUnmatchedOut: true,
+        });
       }
     });
 
-    // ペアにならなかったin記録を追加
     inRecords.forEach((inRec, id) => {
       if (!usedInIds.has(id)) {
-        paired.push(inRec);
+        result.push({
+          inId: id,
+          inTimestamp: inRec.timestamp,
+          isUnmatchedOut: false,
+        });
       }
     });
 
-    return paired.sort((a, b) => {
-        const timeA = a.timestamp || a.outTimestamp;
-        const timeB = b.timestamp || b.outTimestamp;
-        if (!timeA || !timeB) return 0;
-        return timeB.getTime() - timeA.getTime();
+    return result.sort((a, b) => {
+      const timeA = a.inTimestamp || a.outTimestamp;
+      const timeB = b.inTimestamp || b.outTimestamp;
+      if (!timeA || !timeB) return 0;
+      return timeB.getTime() - timeA.getTime();
     });
   }
 
-  function handleEdit(record: Record) {
-    editingRecordId = record.id;
-    // Svelteはdatetime-localのために `YYYY-MM-DDTHH:mm` 形式を要求する
-    editValues.in = format(record.timestamp, "yyyy-MM-dd'T'HH:mm");
+  function handleEdit(record: PairedRecord) {
+    editingRecordId = record.inId;
+    editValues.in = record.inTimestamp && !record.isUnmatchedOut ? format(record.inTimestamp, "yyyy-MM-dd'T'HH:mm") : '';
     editValues.out = record.outTimestamp ? format(record.outTimestamp, "yyyy-MM-dd'T'HH:mm") : '';
   }
 
-  async function handleSave(record: Record) {
+  function handleCancel() {
+    editingRecordId = null;
+  }
+
+  async function handleSave(record: PairedRecord) {
     if (!editingRecordId) return;
 
-    const inDate = new Date(editValues.in);
-    const outDate = editValues.out ? new Date(editValues.out) : null;
+    const inDate = editValues.in ? parseISO(editValues.in) : null;
+    const outDate = editValues.out ? parseISO(editValues.out) : null;
 
     try {
-      // 1. 'in' recordのタイムスタンプを更新
-      await updateRecord(memberId, record.id, { timestamp: inDate });
+      if (record.isUnmatchedOut) {
+        if (outDate && record.outId) {
+          await updateRecord(memberId, record.outId, { timestamp: outDate });
+        }
+      } else {
+        if (inDate) {
+          await updateRecord(memberId, record.inId, { timestamp: inDate });
+        }
 
-      // 2. 'out' recordがあれば更新、なければ何もしない
-      if (record.outId && outDate) {
-        const duration = differenceInMinutes(outDate, inDate);
-        await updateRecord(memberId, record.outId, { 
-          timestamp: outDate,
-          inTimestamp: inDate, // ペアとなるinのタイムスタンプも更新
-          duration: Math.max(0, duration)
-        });
+        if (record.outId && outDate && inDate) {
+          const duration = differenceInMinutes(outDate, inDate);
+          await updateRecord(memberId, record.outId, { 
+            timestamp: outDate, 
+            inTimestamp: inDate, 
+            duration: Math.max(0, duration) 
+          });
+        } else if (!record.outId && outDate && inDate) {
+          await addRecord(memberId, 'out', outDate);
+        }
       }
       
       editingRecordId = null;
-      await fetchRecords(); // データを再取得してUIを更新
+      await fetchRecords();
     } catch (error) {
       console.error("Failed to save record:", error);
       alert("記録の保存に失敗しました。");
     }
   }
 
-  async function handleDelete(record: Record) {
-    if (!confirm("この入室記録と、対応する退室記録を削除しますか？")) return;
+  async function handleDelete(record: PairedRecord) {
+    const confirmMessage = record.isUnmatchedOut
+      ? "この退室記録を削除しますか？"
+      : record.outId
+        ? "この入室記録と、対応する退室記録の両方を削除しますか？"
+        : "この入室記録を削除しますか？";
+
+    if (!confirm(confirmMessage)) return;
 
     try {
-      // 'in' recordを削除
-      await deleteRecord(memberId, record.id);
-      // 対応する 'out' recordがあればそれも削除
-      if (record.outId) {
+      if (record.isUnmatchedOut && record.outId) {
         await deleteRecord(memberId, record.outId);
+      } else {
+        await deleteRecord(memberId, record.inId);
+        if (record.outId) {
+          await deleteRecord(memberId, record.outId);
+        }
       }
-      await fetchRecords(); // UIを更新
+      await fetchRecords();
     } catch (error) {
       console.error("Failed to delete record:", error);
       alert("記録の削除に失敗しました。");
@@ -144,9 +177,8 @@
     fetchRecords();
   });
 
-  // selectedYear or selectedMonth が変更されたらデータを再取得する
   $: if (selectedYear || selectedMonth) {
-    fetchRecords();
+    if (!isLoading) fetchRecords();
   }
 </script>
 
@@ -157,12 +189,12 @@
   </header>
 
   <div class="controls">
-    <select bind:value={selectedYear}>
+    <select bind:value={selectedYear} on:change={fetchRecords}>
       {#each years as year}
         <option value={year}>{year}年</option>
       {/each}
     </select>
-    <select bind:value={selectedMonth}>
+    <select bind:value={selectedMonth} on:change={fetchRecords}>
       {#each months as month}
         <option value={month}>{month}月</option>
       {/each}
@@ -172,7 +204,7 @@
   <div class="record-list">
     {#if isLoading}
       <p>読み込み中...</p>
-    {:else if records.length === 0}
+    {:else if pairedRecords.length === 0}
       <p>この月の記録はありません。</p>
     {:else}
       <table>
@@ -185,26 +217,28 @@
           </tr>
         </thead>
         <tbody>
-          {#each records as record (record.id)}
-            {#if editingRecordId === record.id}
-              <!-- 編集モード -->
-              <tr>
-                <td><input type="datetime-local" bind:value={editValues.in}></td>
+          {#each pairedRecords as record (record.inId)}
+            <tr>
+              {#if editingRecordId === record.inId}
+                <!-- Edit Mode -->
                 <td>
-                  {#if record.outTimestamp}
-                    <input type="datetime-local" bind:value={editValues.out}>
+                  {#if !record.isUnmatchedOut}
+                    <input type="datetime-local" bind:value={editValues.in}>
                   {/if}
                 </td>
+                <td><input type="datetime-local" bind:value={editValues.out}></td>
                 <td>-</td>
                 <td>
                   <button on:click={() => handleSave(record)}>保存</button>
-                  <button on:click={() => editingRecordId = null}>キャンセル</button>
+                  <button on:click={handleCancel}>キャンセル</button>
                 </td>
-              </tr>
-            {:else}
-              <!-- 表示モード -->
-              <tr>
-                <td>{format(record.timestamp, 'yyyy/MM/dd HH:mm')}</td>
+              {:else}
+                <!-- Display Mode -->
+                <td>
+                  {#if !record.isUnmatchedOut && record.inTimestamp}
+                    {format(record.inTimestamp, 'yyyy/MM/dd HH:mm')}
+                  {/if}
+                </td>
                 <td>
                   {#if record.outTimestamp}
                     {format(record.outTimestamp, 'yyyy/MM/dd HH:mm')}
@@ -221,8 +255,8 @@
                   <button on:click={() => handleEdit(record)}>編集</button>
                   <button on:click={() => handleDelete(record)}>削除</button>
                 </td>
-              </tr>
-            {/if}
+              {/if}
+            </tr>
           {/each}
         </tbody>
       </table>
@@ -277,6 +311,7 @@
     border: 1px solid #ddd;
     padding: 8px 12px;
     text-align: left;
+    vertical-align: middle;
   }
   th {
     background-color: #f8f8f8;
