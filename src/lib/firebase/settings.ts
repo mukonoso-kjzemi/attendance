@@ -3,25 +3,24 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 
 const settingsRef = doc(db, 'config', 'settings');
 
-export const getAutoCheckoutTime = async (): Promise<string | null> => {
+export const getSettings = async (): Promise<any> => {
   try {
     const docSnap = await getDoc(settingsRef);
     if (docSnap.exists()) {
-      const data = docSnap.data();
-      return data.autoCheckoutTime || null;
+      return docSnap.data();
     }
-    return null;
+    return {};
   } catch (error) {
-    console.error("Failed to get auto checkout time:", error);
-    return null;
+    console.error("Failed to get settings:", error);
+    return {};
   }
 };
 
-export const setAutoCheckoutTime = async (time: string): Promise<void> => {
+export const updateSettings = async (data: any): Promise<void> => {
   try {
-    await setDoc(settingsRef, { autoCheckoutTime: time }, { merge: true });
+    await setDoc(settingsRef, data, { merge: true });
   } catch (error) {
-    console.error("Failed to set auto checkout time:", error);
+    console.error("Failed to update settings:", error);
     throw new Error('設定の保存に失敗しました。');
   }
 };
