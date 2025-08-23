@@ -4,14 +4,14 @@
   import type { Record as RawRecord } from '$lib/utils/types';
   import { format, startOfMonth, endOfMonth, differenceInMinutes, parseISO } from 'date-fns';
 
-  // このコンポーネント内で使う、ペアリング済みのレコードの型
   type PairedRecord = {
-    inId: string; // in記録のID。ペアなしoutの場合はout記録のIDを使う
+    key: string; // ユニークなキー
+    inId?: string;
     outId?: string;
     inTimestamp?: Date;
     outTimestamp?: Date;
     duration?: number;
-    isUnmatchedOut: boolean; // ペアのいないout記録かどうかのフラグ
+    isUnmatchedOut: boolean;
   };
 
   export let memberId: string;
@@ -22,7 +22,7 @@
   let isLoading = true;
   let selectedYear = new Date().getFullYear();
   let selectedMonth = new Date().getMonth() + 1;
-  let editingRecordId: string | null = null; // inId or outId
+  let editingRecordId: string | null = null;
   let editValues: { in: string; out: string } = { in: '', out: '' };
 
   const years = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i);
@@ -66,6 +66,7 @@
 
       if (correspondingIn && correspondingInId) {
         result.push({
+          key: correspondingInId,
           inId: correspondingInId,
           outId: outRec.id,
           inTimestamp: correspondingIn.timestamp,
@@ -76,7 +77,7 @@
         usedInIds.add(correspondingInId);
       } else {
         result.push({
-          inId: outRec.id, // key用のユニークID
+          key: outRec.id,
           outId: outRec.id,
           outTimestamp: outRec.timestamp,
           isUnmatchedOut: true,
@@ -87,6 +88,7 @@
     inRecords.forEach((inRec, id) => {
       if (!usedInIds.has(id)) {
         result.push({
+          key: id,
           inId: id,
           inTimestamp: inRec.timestamp,
           isUnmatchedOut: false,
@@ -103,7 +105,7 @@
   }
 
   function handleEdit(record: PairedRecord) {
-    editingRecordId = record.inId;
+    editingRecordId = record.key;
     editValues.in = record.inTimestamp && !record.isUnmatchedOut ? format(record.inTimestamp, "yyyy-MM-dd'T'HH:mm") : '';
     editValues.out = record.outTimestamp ? format(record.outTimestamp, "yyyy-MM-dd'T'HH:mm") : '';
   }
@@ -123,7 +125,7 @@
         if (outDate && record.outId) {
           await updateRecord(memberId, record.outId, { timestamp: outDate });
         }
-      } else {
+      } else if (record.inId) {
         if (inDate) {
           await updateRecord(memberId, record.inId, { timestamp: inDate });
         }
@@ -136,7 +138,14 @@
             duration: Math.max(0, duration) 
           });
         } else if (!record.outId && outDate && inDate) {
-          await addRecord(memberId, 'out', outDate);
+          // 既存のinに新しいoutを追加する
+          const newOut = { 
+            type: 'out' as const,
+            timestamp: outDate,
+            inTimestamp: inDate,
+            duration: differenceInMinutes(outDate, inDate)
+          };
+          await addRecord(memberId, newOut.type, newOut.timestamp);
         }
       }
       
@@ -160,7 +169,7 @@
     try {
       if (record.isUnmatchedOut && record.outId) {
         await deleteRecord(memberId, record.outId);
-      } else {
+      } else if (record.inId) {
         await deleteRecord(memberId, record.inId);
         if (record.outId) {
           await deleteRecord(memberId, record.outId);
@@ -173,7 +182,6 @@
     }
   }
 
-  // selectedYear or selectedMonth が変更されたらデータを再取得する
   $: if (memberId && selectedYear && selectedMonth) {
     fetchRecords();
   }
@@ -214,9 +222,9 @@
           </tr>
         </thead>
         <tbody>
-          {#each pairedRecords as record (record.inId)}
+          {#each pairedRecords as record (record.key)}
             <tr>
-              {#if editingRecordId === record.inId}
+              {#if editingRecordId === record.key}
                 <!-- Edit Mode -->
                 <td>
                   {#if !record.isUnmatchedOut}
