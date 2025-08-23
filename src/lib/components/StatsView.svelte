@@ -140,11 +140,6 @@
       downloadCSV(csvContent, filename);
     };
     
-    // 月の選択が変わったら統計を再読み込み
-    $: if (selectedMonth) {
-      loadStats();
-    }
-    
     // 過去6ヶ月の選択肢を作成
     const monthOptions = Array.from({ length: 6 }, (_, i) => {
       const date = subMonths(new Date(), i);
@@ -153,9 +148,12 @@
       return { value, label };
     });
     
-    onMount(() => {
-      loadStats();
-    });
+    // selectedMonth または memberId が変更されたら統計を再読み込み
+    $: {
+      if (selectedMonth && memberId) {
+        loadStats();
+      }
+    }
   </script>
   
   <div class="stats-view">

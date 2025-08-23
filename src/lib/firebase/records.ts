@@ -86,7 +86,7 @@ export const getRecordsForPeriod = async (
     recordsCollection,
     where('timestamp', '>=', Timestamp.fromDate(startDate)),
     where('timestamp', '<=', Timestamp.fromDate(endDate)),
-    orderBy('timestamp')
+    orderBy('timestamp', 'desc')
   );
 
   const snapshot = await getDocs(q);
