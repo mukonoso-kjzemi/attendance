@@ -38,7 +38,7 @@
   // inとoutのペアを組むヘルパー関数
   function pairRecords(rawRecords: Record[]): Record[] {
     const paired: Record[] = [];
-    const inRecords = new Map(rawRecords.filter(r => r.type === 'in').map(r => [r.id, r]));
+    const inRecords = new Map(rawRecords.filter(r => r.type === 'in').map(r => [r.id, { ...r }]));
     const outRecords = rawRecords.filter(r => r.type === 'out');
 
     const usedInIds = new Set<string>();
@@ -47,8 +47,8 @@
       let correspondingIn: Record | undefined;
       let correspondingInId: string | undefined;
 
-      // outRecord.inTimestamp を使って inRecord を見つける
       if (outRec.inTimestamp) {
+        // inTimestampを使ってペアを探す
         for (const [id, inRec] of inRecords.entries()) {
           if (inRec.timestamp.getTime() === outRec.inTimestamp.getTime()) {
             correspondingIn = inRec;
@@ -59,6 +59,7 @@
       }
 
       if (correspondingIn && correspondingInId) {
+        // ペアが見つかった
         paired.push({
           ...correspondingIn,
           outTimestamp: outRec.timestamp,
@@ -67,19 +68,24 @@
         });
         usedInIds.add(correspondingInId);
       } else {
-        // 対応するinが見つからないout記録
+        // ペアが見つからないout記録
         paired.push(outRec);
       }
     });
 
-    // まだペアになっていないin記録（退室していないもの）を追加
+    // ペアにならなかったin記録を追加
     inRecords.forEach((inRec, id) => {
       if (!usedInIds.has(id)) {
         paired.push(inRec);
       }
     });
 
-    return paired.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+    return paired.sort((a, b) => {
+        const timeA = a.timestamp || a.outTimestamp;
+        const timeB = b.timestamp || b.outTimestamp;
+        if (!timeA || !timeB) return 0;
+        return timeB.getTime() - timeA.getTime();
+    });
   }
 
   function handleEdit(record: Record) {
