@@ -95,13 +95,17 @@ export const getRecordsForPeriod = async (
     .filter(doc => !doc.data().deleted)
     .map(doc => {
       const data = doc.data();
-      return {
+      const record: Record = {
         id: doc.id,
         memberId: data.memberId,
         type: data.type,
         timestamp: data.timestamp.toDate(),
-        duration: data.duration
+        duration: data.duration,
       };
+      if (data.inTimestamp) {
+        record.inTimestamp = data.inTimestamp.toDate();
+      }
+      return record;
     });
 };
 

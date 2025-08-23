@@ -25,6 +25,7 @@ export interface Record {
   type: RecordType;
   timestamp: Date;
   duration?: number;  // 'out'の場合のみ存在する（滞在時間、分単位）
+  inTimestamp?: Date; // 'out'の場合、対応する'in'のタイムスタンプ
   deleted?: boolean;  // 論理削除フラグ
 }
 
