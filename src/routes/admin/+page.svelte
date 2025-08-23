@@ -3,6 +3,7 @@
     import { initMembersListener, sortedMembers } from '$lib/stores/members';
     import { updateMemberStatus } from '$lib/firebase/members';
     import { addRecord } from '$lib/firebase/records';
+    import { getAutoCheckoutTime, setAutoCheckoutTime } from '$lib/firebase/settings';
     import type { Member } from '$lib/utils/types';
     import { format } from 'date-fns';
     import { ja } from 'date-fns/locale';
@@ -11,6 +12,36 @@
     let unsubscribe: () => void;
     let processing = false;
     let selectedMemberId = '';
+    let autoCheckoutTime = '23:00';
+    let settingsProcessing = false;
+
+    onMount(async () => {
+      unsubscribe = initMembersListener();
+      settingsProcessing = true;
+      const time = await getAutoCheckoutTime();
+      if (time) {
+        autoCheckoutTime = time;
+      }
+      settingsProcessing = false;
+    });
+    
+    onDestroy(() => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    });
+
+    const handleSaveSettings = async () => {
+      settingsProcessing = true;
+      try {
+        await setAutoCheckoutTime(autoCheckoutTime);
+        alert('設定を保存しました。');
+      } catch (error) {
+        alert('設定の保存に失敗しました。');
+      } finally {
+        settingsProcessing = false;
+      }
+    };
     
     // 全員退室処理
     const setAllOut = async () => {
@@ -154,6 +185,21 @@
             状態を切り替え
           </button>
         </div>
+      </section>
+
+      <section class="action-section">
+        <h2>自動退室設定</h2>
+        <div class="settings-form">
+          <label for="checkout-time">強制退室時刻</label>
+          <input type="time" id="checkout-time" bind:value={autoCheckoutTime} disabled={settingsProcessing}>
+          <button on:click={handleSaveSettings} disabled={settingsProcessing} class="save-button">
+            {settingsProcessing ? '保存中...' : '保存'}
+          </button>
+        </div>
+        <p class="settings-note">
+          ここで設定した時刻に、サーバー側で毎日自動的に全員が退室処理されます。<br>
+          （別途Cloud Functionsの設定が必要です）
+        </p>
       </section>
     </div>
     
@@ -318,6 +364,38 @@
     
     .toggle-button:hover:not(:disabled) {
       background-color: #f57c00;
+    }
+
+    .save-button {
+      background-color: #1976d2;
+      color: white;
+    }
+
+    .save-button:hover:not(:disabled) {
+      background-color: #1565c0;
+    }
+
+    .settings-form {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .settings-form label {
+      font-weight: bold;
+    }
+
+    .settings-form input[type="time"] {
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 16px;
+    }
+
+    .settings-note {
+      margin-top: 12px;
+      font-size: 12px;
+      color: #666;
     }
     
     .member-selector {
