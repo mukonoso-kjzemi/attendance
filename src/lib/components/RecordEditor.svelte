@@ -173,12 +173,9 @@
     }
   }
 
-  onMount(() => {
+  // selectedYear or selectedMonth が変更されたらデータを再取得する
+  $: if (memberId && selectedYear && selectedMonth) {
     fetchRecords();
-  });
-
-  $: if (selectedYear || selectedMonth) {
-    if (!isLoading) fetchRecords();
   }
 </script>
 
