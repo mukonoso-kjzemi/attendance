@@ -138,11 +138,9 @@
     fetchRecords();
   });
 
-  $: {
-    // selectedYear or selectedMonth changes
-    if (!isLoading) {
-      fetchRecords();
-    }
+  // selectedYear or selectedMonth が変更されたらデータを再取得する
+  $: if (selectedYear || selectedMonth) {
+    fetchRecords();
   }
 </script>
 
