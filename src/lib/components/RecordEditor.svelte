@@ -189,12 +189,12 @@
   </header>
 
   <div class="controls">
-    <select bind:value={selectedYear} on:change={fetchRecords}>
+    <select bind:value={selectedYear}>
       {#each years as year}
         <option value={year}>{year}年</option>
       {/each}
     </select>
-    <select bind:value={selectedMonth} on:change={fetchRecords}>
+    <select bind:value={selectedMonth}>
       {#each months as month}
         <option value={month}>{month}月</option>
       {/each}
