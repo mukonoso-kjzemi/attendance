@@ -113,6 +113,7 @@
         <a href="/" class="back-link">トップに戻る</a>
         <a href="/admin/members" class="nav-link">メンバー管理</a>
         <a href="/admin/stats" class="nav-link">統計</a>
+        <a href="/admin/ranking" class="nav-link">月次ランキング</a>
       </div>
     </header>
     
