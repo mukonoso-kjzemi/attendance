@@ -18,20 +18,16 @@
 
   let members: Member[] = [];
   let records: AttendanceRecord[] = [];
-  let rankedMembers: RankedMember[] = [];
   let isLoading = true;
   let targetHours = 30;
 
-  let selectedYear: number;
-  let selectedMonth: number;
+  let selectedYear: number = getYear(new Date());
+  let selectedMonth: number = getMonth(new Date()) + 1;
 
   const years = Array.from({ length: 5 }, (_, i) => getYear(new Date()) - i);
   const months = Array.from({ length: 12 }, (_, i) => i + 1);
 
   onMount(async () => {
-    selectedYear = getYear(new Date());
-    selectedMonth = getMonth(new Date()) + 1;
-
     try {
       const [membersData, recordsData] = await Promise.all([
         getAllMembers(),
@@ -47,9 +43,10 @@
     }
   });
 
-  function calculateRanking() {
-    const targetMonth = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
+  $: rankedMembers = (() => {
+    if (isLoading) return [];
 
+    const targetMonth = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
     const memberStats = new Map<string, { totalTime: number; records: AttendanceRecord[] }>();
 
     for (const record of records) {
@@ -79,8 +76,8 @@
     });
 
     ranked.sort((a, b) => b.totalTime - a.totalTime);
-    rankedMembers = ranked;
-  }
+    return ranked;
+  })();
 
   function formatDuration(minutes: number): string {
     const h = Math.floor(minutes / 60);
@@ -117,10 +114,6 @@
     const filename = `${selectedYear}年${selectedMonth}月_滞在ランキング.csv`;
     
     downloadCSV(csvContent, filename);
-  }
-
-  $: if (!isLoading) {
-    calculateRanking();
   }
 </script>
 
