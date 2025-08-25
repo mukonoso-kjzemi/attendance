@@ -1,10 +1,11 @@
-<script lang="ts">
+'''<script lang="ts">
   import { onMount } from 'svelte';
   import { getMembers as getAllMembers } from '$lib/firebase/members';
   import { getAllRecords } from '$lib/firebase/records';
   import type { Member, Record as AttendanceRecord } from '$lib/utils/types';
   import { getYear, getMonth, format } from 'date-fns';
-  import { downloadCSV, simplifiedShiftJISConversion } from '$lib/utils/export';
+  import { downloadCSV } from '$lib/utils/export';
+  import { GRADE_COLORS } from '$lib/constants';
 
   type RankedMember = {
     id: string;
@@ -35,7 +36,6 @@
       ]);
       members = membersData;
       records = recordsData;
-      calculateRanking();
     } catch (error) {
       console.error("Failed to load data:", error);
       alert("データの読み込みに失敗しました。");
@@ -45,6 +45,8 @@
   });
 
   function calculateRanking() {
+    if (isLoading) return;
+    
     const targetMonth = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
 
     const memberStats = new Map<string, { totalTime: number; records: AttendanceRecord[] }>();
@@ -76,6 +78,15 @@
     rankedMembers = ranked;
   }
 
+  function formatDuration(minutes: number): string {
+    const h = Math.floor(minutes / 60);
+    const m = Math.round(minutes % 60);
+    if (h > 0) {
+      return `${h}時間${m}分`;
+    }
+    return `${m}分`;
+  }
+
   function handleExportCSV() {
     if (rankedMembers.length === 0) {
       alert('エクスポートするデータがありません。');
@@ -94,17 +105,20 @@
         member.name,
         member.grade,
         member.totalTime,
-        `"${recordsText}"` // To handle commas in recordsText
+        `"${recordsText}"`
       ].join(',');
     });
 
-    const csvContent = [headers.join(','), ...rows].join('\n');
+    const csvContent = [headers.join(','), ...rows].join('
+');
     const filename = `${selectedYear}年${selectedMonth}月_滞在ランキング.csv`;
     
     downloadCSV(csvContent, filename);
   }
 
-  $: if (!isLoading) {
+  $: {
+    selectedYear,
+    selectedMonth,
     calculateRanking();
   }
 </script>
@@ -148,7 +162,7 @@
             <th>順位</th>
             <th>名前</th>
             <th>学年</th>
-            <th>総滞在時間 (分)</th>
+            <th>総滞在時間</th>
           </tr>
         </thead>
         <tbody>
@@ -157,9 +171,11 @@
               <td>{index + 1}</td>
               <td>{member.name}</td>
               <td>
-                <span class="grade-badge">{member.grade}</span>
+                <span class="grade-badge" style="background-color: {GRADE_COLORS[member.grade] || '#777'}">
+                  {member.grade}
+                </span>
               </td>
-              <td>{Math.round(member.totalTime)}</td>
+              <td>{formatDuration(member.totalTime)}</td>
             </tr>
           {/each}
         </tbody>
@@ -258,7 +274,6 @@
     font-size: 12px;
     font-weight: bold;
     color: white;
-    background-color: #777; /* Default color */
   }
   .export-section {
     margin-top: 20px;
@@ -277,4 +292,4 @@
   .export-button:hover {
     background-color: #45a049;
   }
-</style>
+</style>''
