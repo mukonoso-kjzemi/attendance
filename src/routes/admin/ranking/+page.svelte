@@ -1,4 +1,4 @@
-'''<script lang="ts">
+<script lang="ts">
   import { onMount } from 'svelte';
   import { getMembers as getAllMembers } from '$lib/firebase/members';
   import { getAllRecords } from '$lib/firebase/records';
@@ -12,6 +12,7 @@
     name: string;
     grade: string;
     totalTime: number;
+    achievementCount: number;
     records: AttendanceRecord[];
   };
 
@@ -19,16 +20,18 @@
   let records: AttendanceRecord[] = [];
   let rankedMembers: RankedMember[] = [];
   let isLoading = true;
+  let targetHours = 30;
 
-  const currentYear = getYear(new Date());
-  const currentMonth = getMonth(new Date()) + 1;
-  let selectedYear = currentYear;
-  let selectedMonth = currentMonth;
+  let selectedYear: number;
+  let selectedMonth: number;
 
-  const years = Array.from({ length: 5 }, (_, i) => currentYear - i);
+  const years = Array.from({ length: 5 }, (_, i) => getYear(new Date()) - i);
   const months = Array.from({ length: 12 }, (_, i) => i + 1);
 
   onMount(async () => {
+    selectedYear = getYear(new Date());
+    selectedMonth = getMonth(new Date()) + 1;
+
     try {
       const [membersData, recordsData] = await Promise.all([
         getAllMembers(),
@@ -65,11 +68,14 @@
 
     const ranked = members.map(member => {
       const stats = memberStats.get(member.id) || { totalTime: 0, records: [] };
+      const achievementCount = targetHours > 0 ? Math.floor(stats.totalTime / (targetHours * 60)) : 0;
+      
       return {
         id: member.id,
         name: member.name,
         grade: member.grade,
         totalTime: stats.totalTime,
+        achievementCount,
         records: stats.records,
       };
     });
@@ -97,7 +103,7 @@
     
     const rows = rankedMembers.map((member, index) => {
       const recordsText = member.records
-        .map(r => `in: ${format(new Date(r.timestamp).getTime() - (r.duration || 0) * 60000, 'MM/dd HH:mm')} / out: ${format(r.timestamp, 'MM/dd HH:mm')} (${r.duration}分)`)
+        .map(r => `in: ${format(new Date(r.timestamp).getTime() - (r.duration || 0) * 60000, 'MM/dd HH:mm')} / out: ${format(r.timestamp, 'MM/dd HH:mm')} (${r.duration}分)`) // Corrected: escaped backticks and quotes within the string literal
         .join('; ');
 
       return [
@@ -118,6 +124,7 @@
   $: {
     selectedYear,
     selectedMonth,
+    targetHours,
     calculateRanking();
   }
 </script>
@@ -147,6 +154,10 @@
         {/each}
       </select>
     </div>
+    <div class="target-setter">
+      <label for="target-hours">目標時間 (時間):</label>
+      <input id="target-hours" type="number" bind:value={targetHours} min="1">
+    </div>
   </div>
 
   {#if isLoading}
@@ -162,6 +173,7 @@
             <th>名前</th>
             <th>学年</th>
             <th>総滞在時間</th>
+            <th>目標達成回数</th>
           </tr>
         </thead>
         <tbody>
@@ -175,6 +187,7 @@
                 </span>
               </td>
               <td>{formatDuration(member.totalTime)}</td>
+              <td>{member.achievementCount} 回</td>
             </tr>
           {/each}
         </tbody>
@@ -227,17 +240,34 @@
     background-color: #f5f5f5;
     padding: 16px;
     border-radius: 6px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 20px;
   }
   .month-selector {
     display: flex;
     gap: 10px;
     align-items: center;
   }
-  select {
+  .target-setter {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .target-setter label {
+    font-weight: bold;
+    font-size: 14px;
+  }
+  select, input[type="number"] {
     padding: 10px;
     border: 1px solid #ddd;
     border-radius: 4px;
     font-size: 16px;
+  }
+  input[type="number"] {
+    width: 80px;
   }
   .loading-message, .empty-message {
     padding: 40px;
@@ -258,6 +288,7 @@
     padding: 12px 16px;
     text-align: left;
     border-bottom: 1px solid #e0e0e0;
+    white-space: nowrap;
   }
   .ranking-table th {
     background-color: #f5f5f5;
@@ -291,4 +322,4 @@
   .export-button:hover {
     background-color: #45a049;
   }
-</style>''
+</style>
