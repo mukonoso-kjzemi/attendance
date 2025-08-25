@@ -171,3 +171,35 @@ export const deleteRecord = async (
   const recordRef = doc(getRecordsCollection(memberId), recordId);
   await updateDoc(recordRef, { deleted: true });
 };
+
+// 全メンバーの全記録を取得
+export const getAllRecords = async (): Promise<Record[]> => {
+  try {
+    const recordsGroup = collectionGroup(db, 'history');
+    const q = query(
+      recordsGroup,
+      where('deleted', '==', false),
+      orderBy('timestamp', 'desc')
+    );
+
+    const snapshot = await getDocs(q);
+    
+    return snapshot.docs.map(doc => {
+      const data = doc.data();
+      const record: Record = {
+        id: doc.id,
+        memberId: data.memberId,
+        type: data.type,
+        timestamp: data.timestamp.toDate(),
+        duration: data.duration,
+      };
+      if (data.inTimestamp) {
+        record.inTimestamp = data.inTimestamp.toDate();
+      }
+      return record;
+    });
+  } catch (error) {
+    console.error('Failed to get all records:', error);
+    throw new Error('すべての記録の取得に失敗しました。');
+  }
+};

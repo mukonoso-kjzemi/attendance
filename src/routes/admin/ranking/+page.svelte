@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { getAllMembers } from '$lib/firebase/members';
+  import { getMembers as getAllMembers } from '$lib/firebase/members';
   import { getAllRecords } from '$lib/firebase/records';
   import type { Member, Record as AttendanceRecord } from '$lib/utils/types';
   import { getYear, getMonth, format } from 'date-fns';
