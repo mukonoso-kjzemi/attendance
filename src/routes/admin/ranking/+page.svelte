@@ -109,8 +109,7 @@
       ].join(',');
     });
 
-    const csvContent = [headers.join(','), ...rows].join('
-');
+    const csvContent = [headers.join(',') , ...rows].join('\n');
     const filename = `${selectedYear}年${selectedMonth}月_滞在ランキング.csv`;
     
     downloadCSV(csvContent, filename);
