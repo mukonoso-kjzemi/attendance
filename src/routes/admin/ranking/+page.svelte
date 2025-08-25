@@ -94,11 +94,18 @@
       return;
     }
 
-    const headers = ['順位', '名前', '学年', '総滞在時間(分)', '滞在記録'];
+    const headers = [
+      '順位',
+      '名前',
+      '学年',
+      '総滞在時間(分)',
+      `目標達成回数 (${targetHours}時間)`,
+      '滞在記録'
+    ];
     
     const rows = rankedMembers.map((member, index) => {
       const recordsText = member.records
-        .map(r => `in: ${format(new Date(r.timestamp).getTime() - (r.duration || 0) * 60000, 'MM/dd HH:mm')} / out: ${format(r.timestamp, 'MM/dd HH:mm')} (${r.duration}分)`) // Corrected: escaped backticks and quotes within the string literal
+        .map(r => `in: ${format(new Date(r.timestamp).getTime() - (r.duration || 0) * 60000, 'MM/dd HH:mm')} / out: ${format(r.timestamp, 'MM/dd HH:mm')} (${r.duration}分)`)
         .join('; ');
 
       return [
@@ -106,7 +113,8 @@
         member.name,
         member.grade,
         member.totalTime,
-        `"${recordsText}"`
+        member.achievementCount,
+        `"${recordsText}"`, // Corrected: escaped quotes within the string literal
       ].join(',');
     });
 

@@ -2,7 +2,7 @@
     import { page } from '$app/stores';
     import StatusCounter from './StatusCounter.svelte';
     
-    export let title = '滞在管理システム v1.2';
+    export let title = '出席管理システム v1.3';
     export let showCounter = true;
     export let showAdminLink = true;
     
