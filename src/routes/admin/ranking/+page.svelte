@@ -48,8 +48,6 @@
   });
 
   function calculateRanking() {
-    if (isLoading) return;
-    
     const targetMonth = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}`;
 
     const memberStats = new Map<string, { totalTime: number; records: AttendanceRecord[] }>();
@@ -121,10 +119,7 @@
     downloadCSV(csvContent, filename);
   }
 
-  $: {
-    selectedYear,
-    selectedMonth,
-    targetHours,
+  $: if (!isLoading) {
     calculateRanking();
   }
 </script>
